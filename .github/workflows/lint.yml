@@ -1,0 +1,121 @@
+name: Lint & Validate Detection Rules
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  lint:
+    name: YAML lint + Sigma validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet yamllint sigma-cli
+
+      # -----------------------------------------------------------------------
+      # Step 1: yamllint – enforce consistent YAML formatting across all
+      # Sigma rule files.  Configuration lives in .yamllint.yml at repo root.
+      # -----------------------------------------------------------------------
+      - name: yamllint – Sigma rules
+        run: |
+          yamllint -c .yamllint.yml sigma/
+
+      # -----------------------------------------------------------------------
+      # Step 2: sigma-cli convert – verify every Sigma rule can be parsed and
+      # converted to at least one backend without errors.  We use the generic
+      # "splunk" backend as a lightweight parse check; the actual converted
+      # output is discarded.
+      # -----------------------------------------------------------------------
+      - name: sigma-cli – parse & convert check (Splunk backend)
+        run: |
+          find sigma/ -name "*.yml" | while read rule; do
+            echo "Checking: $rule"
+            sigma convert -t splunk "$rule" > /dev/null
+          done
+
+      # -----------------------------------------------------------------------
+      # Step 3: Metadata field validation – assert that every Sigma rule
+      # contains all required top-level fields defined in CONTRIBUTING.md.
+      # -----------------------------------------------------------------------
+      - name: Sigma metadata field check
+        run: |
+          python - <<'EOF'
+          import sys, os, glob
+          import yaml
+
+          REQUIRED_FIELDS = [
+              "title", "id", "status", "description",
+              "references", "author", "date", "tags",
+              "logsource", "detection", "falsepositives", "level",
+          ]
+
+          VALID_STATUSES = {"experimental", "test", "stable", "deprecated"}
+          VALID_LEVELS   = {"informational", "low", "medium", "high", "critical"}
+
+          errors = []
+
+          for path in glob.glob("sigma/**/*.yml", recursive=True):
+              with open(path) as fh:
+                  try:
+                      rule = yaml.safe_load(fh)
+                  except yaml.YAMLError as exc:
+                      errors.append(f"{path}: YAML parse error – {exc}")
+                      continue
+
+              if not isinstance(rule, dict):
+                  errors.append(f"{path}: root document is not a mapping")
+                  continue
+
+              for field in REQUIRED_FIELDS:
+                  if field not in rule:
+                      errors.append(f"{path}: missing required field '{field}'")
+
+              status = rule.get("status")
+              if status and status not in VALID_STATUSES:
+                  errors.append(
+                      f"{path}: invalid status '{status}' "
+                      f"(must be one of: {', '.join(sorted(VALID_STATUSES))})"
+                  )
+
+              level = rule.get("level")
+              if level and level not in VALID_LEVELS:
+                  errors.append(
+                      f"{path}: invalid level '{level}' "
+                      f"(must be one of: {', '.join(sorted(VALID_LEVELS))})"
+                  )
+
+              tags = rule.get("tags", [])
+              if isinstance(tags, list):
+                  for tag in tags:
+                      if tag.startswith("attack.") and not (
+                          # tactic tags:  attack.<word>
+                          tag.replace("attack.", "").replace("_", "").isalpha()
+                          # technique tags: attack.tNNNN or attack.tNNNN.NNN
+                          or tag[len("attack."):].lower().startswith("t")
+                      ):
+                          errors.append(
+                              f"{path}: non-standard ATT&CK tag '{tag}' – "
+                              "use 'attack.tXXXX' or 'attack.<tactic>' format"
+                          )
+
+          if errors:
+              print("\nMetadata validation FAILED:\n")
+              for e in errors:
+                  print(f"  ✗ {e}")
+              sys.exit(1)
+          else:
+              print("Metadata validation passed.")
+          EOF

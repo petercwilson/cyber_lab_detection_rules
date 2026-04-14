@@ -1,0 +1,29 @@
+---
+extends: default
+
+rules:
+  # Allow longer lines in description / references fields
+  line-length:
+    max: 120
+    level: warning
+
+  # Sigma rules conventionally use 4-space indentation
+  indentation:
+    spaces: 4
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Allow inline comments (used heavily for filter documentation)
+  comments-indentation: disable
+
+  # Sigma rules conventionally omit the YAML document-start marker ("---")
+  document-start: disable
+
+  # Trailing spaces are always an error
+  trailing-spaces: enable
+
+  # Single blank line between top-level keys is fine; no blank line required
+  empty-lines:
+    max: 1
+    max-start: 0
+    max-end: 1

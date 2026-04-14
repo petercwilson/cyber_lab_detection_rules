@@ -1,0 +1,68 @@
+===========================================================================
+Rule:        DNS Beaconing to Suspicious Domain (evil-c2-callback.local)
+Platform:    Splunk (with Sysmon or DNS debug/ETW log source)
+MITRE ATT&CK: T1071.004 - Application Layer Protocol: DNS
+              T1568     - Dynamic Resolution
+Description: Detects DNS queries for the domain evil-c2-callback.local.
+             The ".local" suffix is a multicast DNS (mDNS) suffix; a query
+             for this name being forwarded to an upstream resolver indicates
+             deliberate C2 beaconing behaviour.
+
+Log Sources (choose one, adapt index/sourcetype to your environment):
+  Option A - Sysmon Event ID 22 (DNS Query):   index=sysmon EventCode=22
+  Option B - Windows DNS Server debug log:     index=dns sourcetype="WinDNS"
+  Option C - Network/proxy/firewall telemetry: index=network sourcetype="dns"
+===========================================================================
+
+---------------------------------------------------------------------------
+Query 1: Wildcard/targeted match - flag every individual DNS lookup for
+the domain. Sysmon EID 22 records each DNS lookup made by a process,
+including the queried hostname and the answering IP address(es).
+The LIKE operator covers exact matches AND subdomain prefixes
+(e.g. sub.evil-c2-callback.local) in a single condition.
+---------------------------------------------------------------------------
+
+index=sysmon EventCode=22
+| eval query_lower = lower(QueryName)
+| where like(query_lower, "%evil-c2-callback.%")
+| table _time, ComputerName, User, Image, ProcessId, QueryName, QueryResults
+| sort - _time
+| rename
+    ComputerName AS Hostname,
+    Image        AS ProcessPath,
+    ProcessId    AS PID,
+    QueryName    AS DNSQuery,
+    QueryResults AS ResolvedIPs
+
+---------------------------------------------------------------------------
+Query 2: Aggregated view - counts per host/domain/process combination.
+Useful for identifying which processes are generating the queries and
+how often the domain has been queried across the environment.
+---------------------------------------------------------------------------
+
+index=sysmon EventCode=22
+| eval query_lower = lower(QueryName)
+| where like(query_lower, "%evil-c2-callback.%")
+| stats
+    count         AS QueryCount,
+    values(Image) AS ProcessList,
+    dc(ProcessId) AS UniqueProcesses,
+    min(_time)    AS FirstSeen,
+    max(_time)    AS LastSeen
+    BY ComputerName, QueryName, QueryResults
+| sort - QueryCount
+
+---------------------------------------------------------------------------
+Query 3: Beaconing pattern detection - same host querying the domain
+repeatedly over a sliding window, indicating automated periodic C2
+check-in. Threshold: >= 3 queries in any 10-minute bucket.
+---------------------------------------------------------------------------
+
+index=sysmon EventCode=22
+| eval query_lower = lower(QueryName)
+| where like(query_lower, "%evil-c2-callback.%")
+| bucket _time span=10m
+| stats count AS QueryCount BY _time, ComputerName, QueryName, Image
+| where QueryCount >= 3
+| sort - QueryCount
+

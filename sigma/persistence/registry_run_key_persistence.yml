@@ -1,0 +1,51 @@
+title: Suspicious Registry Run Key Persistence via HKCU
+id: a3e7b4c1-2f85-4d62-9e10-7c3a5b8f91d2
+status: test
+description: >
+    Detects the creation or modification of a registry value under the HKCU Run key,
+    which is a common technique (T1547.001) used by malware to achieve persistence
+    on reboot. Sysmon Event ID 13 captures registry value set operations.
+references:
+    - https://attack.mitre.org/techniques/T1547/001/
+    - https://docs.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys
+author: Cyber Lab Detection Rules
+date: 2026-04-14
+tags:
+    - attack.persistence
+    - attack.t1547.001
+    - attack.registry_run_keys
+logsource:
+    category: registry_set
+    product: windows
+    # Sysmon Event ID 13 — RegistryEvent (Value Set)
+detection:
+    selection:
+        EventID: 13
+        TargetObject|startswith:
+            - 'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run\'
+            - 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run\'
+    # Reduce false positives by filtering out well-known, signed software installers
+    # that legitimately write to this key (e.g., OneDrive, Teams, Slack).
+    # Expand this filter list based on your environment's baseline.
+    filter_legitimate_software:
+        Image|endswith:
+            - '\OneDrive.exe'
+            - '\Teams.exe'
+            - '\Slack.exe'
+            - '\Dropbox.exe'
+            - '\GoogleDriveFS.exe'
+        Signed: 'true'
+    condition: selection and not filter_legitimate_software
+fields:
+    - EventID
+    - Image
+    - TargetObject
+    - Details
+    - User
+    - ProcessId
+    - UtcTime
+falsepositives:
+    - Legitimate software that self-registers for startup via the Run key using
+      a signed installer binary not captured in the filter list above. Tune the
+      filter by adding known-good image paths present in your environment.
+level: high

@@ -10,7 +10,7 @@ A collection of high-fidelity detection rules built for a cybersecurity lab envi
 |---|------|----------|-----------------|------|
 | 1 | Registry Run Key Persistence | **Sigma (Sysmon EID 13)** | T1547.001 | [`sigma/persistence/registry_run_key_persistence.yml`](sigma/persistence/registry_run_key_persistence.yml) |
 | 2 | DNS Beaconing to C2 Domain | **Splunk SPL (Sysmon EID 22)** | T1071.004 | [`splunk/dns_c2_beaconing.spl`](splunk/dns_c2_beaconing.spl) |
-| 3 | Reconnaissance Process Execution | **Kusto / KQL (Sysmon EID 1)** | T1033, T1016 | [`kql/suspicious_recon_process_execution.kql`](kql/suspicious_recon_process_execution.kql) |
+| 3 | Suspicious Reconnaissance Process Execution | **Kusto / KQL (Sysmon EID 1)** | T1033, T1016 | [`kql/suspicious_recon_process_execution.kql`](kql/suspicious_recon_process_execution.kql) |
 
 ---
 

@@ -10,10 +10,10 @@ references:
     - https://docs.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys
 author: Cyber Lab Detection Rules
 date: 2026-04-14
+modified: 2026-04-14
 tags:
     - attack.persistence
     - attack.t1547.001
-    - attack.registry_run_keys
 logsource:
     category: registry_set
     product: windows

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate.sh – local mirror of the CI lint/validation pipeline.
 # Usage: bash scripts/validate.sh
-# Requirements: pip install yamllint sigma-cli
+# Requirements: pip install yamllint sigma-cli pySigma-backend-splunk
 
 set -euo pipefail
 
@@ -16,14 +16,14 @@ echo ""
 echo "=== Step 2: sigma-cli convert (Splunk backend) ==="
 find sigma/ -name "*.yml" | while read -r rule; do
     echo "  Checking: $rule"
-    sigma convert -t splunk "$rule" > /dev/null
+    sigma convert -t splunk --without-pipeline "$rule" > /dev/null
 done
 echo "sigma-cli convert passed."
 
 echo ""
 echo "=== Step 3: Sigma metadata field check ==="
-python - <<'EOF'
-import sys, glob
+python3 - <<'EOF'
+import sys, glob, re
 import yaml
 
 REQUIRED_FIELDS = [
@@ -34,6 +34,10 @@ REQUIRED_FIELDS = [
 
 VALID_STATUSES = {"experimental", "test", "stable", "deprecated"}
 VALID_LEVELS   = {"informational", "low", "medium", "high", "critical"}
+UUID_RE        = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 errors = []
 
@@ -52,6 +56,12 @@ for path in glob.glob("sigma/**/*.yml", recursive=True):
     for field in REQUIRED_FIELDS:
         if field not in rule:
             errors.append(f"{path}: missing required field '{field}'")
+
+    rule_id = rule.get("id")
+    if rule_id and not UUID_RE.match(str(rule_id)):
+        errors.append(
+            f"{path}: 'id' field '{rule_id}' is not a valid UUID v4"
+        )
 
     status = rule.get("status")
     if status and status not in VALID_STATUSES:

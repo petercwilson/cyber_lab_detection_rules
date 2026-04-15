@@ -1,0 +1,34 @@
+# .pre-commit-config.yaml
+# Local pre-commit hooks that mirror the CI pipeline.
+#
+# Setup (one-time):
+#   pip install pre-commit
+#   pre-commit install
+#
+# Manual run against all files:
+#   pre-commit run --all-files
+
+repos:
+  # -----------------------------------------------------------------------
+  # 1. General hygiene hooks (trailing whitespace, EOL, merge conflicts, …)
+  # -----------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--unsafe]   # allow YAML with duplicate keys (some Sigma rules use them)
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # -----------------------------------------------------------------------
+  # 2. YAML lint – enforces .yamllint.yml config on all Sigma rules
+  # -----------------------------------------------------------------------
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-c, .yamllint.yml]
+        files: ^sigma/.*\.yml$

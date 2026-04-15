@@ -1,0 +1,63 @@
+title: PowerShell Encoded Command Execution
+id: b9d3f15e-6c42-4a78-9f01-2e5d8b4c73a2
+status: experimental
+description: >
+    Detects the execution of PowerShell with a Base64-encoded command via the
+    -EncodedCommand (or its aliases -enc, -en, -ec) parameter. Threat actors
+    commonly encode payloads to bypass simple string-based detection and to
+    conceal malicious script content from casual inspection. This technique
+    is heavily used in phishing-delivered droppers, fileless malware loaders,
+    and post-exploitation frameworks (T1059.001).
+references:
+    - https://attack.mitre.org/techniques/T1059/001/
+    - https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_powershell_exe
+    - https://www.sans.org/blog/powershell-for-the-blue-team/
+author: Cyber Lab Detection Rules
+date: 2026-04-15
+tags:
+    - attack.execution
+    - attack.t1059.001
+logsource:
+    category: process_creation
+    product: windows
+    # Sysmon Event ID 1 — Process Creation
+detection:
+    selection:
+        EventID: 1
+        Image|endswith:
+            - '\powershell.exe'
+            - '\pwsh.exe'
+        CommandLine|contains:
+            - ' -EncodedCommand '
+            - ' -encodedcommand '
+            - ' -enc '
+            - ' -en '
+            - ' -ec '
+    # Exclude known-legitimate automation that uses encoded commands, such as
+    # some Microsoft management tools and CI/CD agents. Tune for your baseline.
+    filter_legitimate:
+        Image|endswith:
+            - '\powershell.exe'
+            - '\pwsh.exe'
+        ParentImage|endswith:
+            - '\msiexec.exe'
+            - '\svchost.exe'
+        CommandLine|contains:
+            - 'WindowsUpdate'
+            - 'MicrosoftUpdate'
+    condition: selection and not filter_legitimate
+fields:
+    - EventID
+    - Image
+    - CommandLine
+    - ParentImage
+    - ParentCommandLine
+    - User
+    - ProcessId
+    - UtcTime
+falsepositives:
+    - Legitimate IT automation scripts and management tools (e.g., SCCM, Intune,
+      some Windows Update helpers) that encode long command strings to avoid
+      shell-escaping issues. Review ParentImage and expand the filter list based
+      on your environment's baseline before promoting to 'stable'.
+level: medium

@@ -1,0 +1,62 @@
+title: LSASS Memory Dumped via Common Credential Theft Tools
+id: c7f2e94b-3a81-4d55-8e12-9b4c6d7a03f1
+status: experimental
+description: >
+    Detects access to the LSASS process memory by tools commonly used for credential
+    theft, such as Mimikatz, ProcDump, or Task Manager exports. LSASS stores
+    credential material (NTLM hashes, Kerberos tickets) in memory; reading its memory
+    is a prerequisite for pass-the-hash and pass-the-ticket attacks (T1003.001).
+    The rule correlates process access events (Sysmon EID 10) targeting lsass.exe
+    with known offensive tool image paths and access-right masks.
+references:
+    - https://attack.mitre.org/techniques/T1003/001/
+    - https://docs.microsoft.com/en-us/sysinternals/downloads/procdump
+    - https://github.com/gentilkiwi/mimikatz
+author: Cyber Lab Detection Rules
+date: 2026-04-15
+tags:
+    - attack.credential_access
+    - attack.t1003.001
+logsource:
+    category: process_access
+    product: windows
+    # Sysmon Event ID 10 — ProcessAccess
+detection:
+    selection:
+        EventID: 10
+        TargetImage|endswith: '\lsass.exe'
+        # PROCESS_VM_READ (0x0010) and PROCESS_ALL_ACCESS (0x001F0FFF / 0x1FFFFF)
+        # are the access masks used by common dumping tools.
+        GrantedAccess|contains:
+            - '0x1010'
+            - '0x1410'
+            - '0x147a'
+            - '0x143a'
+            - '0x1438'
+            - '0x1fffff'
+            - '0x1f0fff'
+            - '0x1f1fff'
+    # Filter out known-legitimate security software that routinely reads LSASS.
+    # Extend this list based on your EDR / AV agent paths.
+    filter_legitimate:
+        SourceImage|endswith:
+            - '\MsMpEng.exe'
+            - '\SenseIR.exe'
+            - '\csrss.exe'
+            - '\wininit.exe'
+    condition: selection and not filter_legitimate
+fields:
+    - EventID
+    - SourceImage
+    - TargetImage
+    - GrantedAccess
+    - SourceProcessId
+    - TargetProcessId
+    - CallTrace
+falsepositives:
+    - Legitimate security/EDR products that inspect LSASS memory for threat
+      detection. Add their image paths to the filter_legitimate block and verify
+      the binary is signed before adding it to the allow-list.
+    - Windows Error Reporting (WerFault.exe) creating crash dumps after LSASS
+      exceptions — rare but possible in unstable environments.
+level: high
